@@ -1,0 +1,50 @@
+service: inventory-app-api
+
+provider:
+  name: aws
+  runtime: java25
+  lambdaHashingVersion: 20201221
+  region: us-west-2
+  
+package:
+  artifact: target/inventory-app-api.jar
+
+functions:
+  api:
+    handler: ogren.collin.inventory_app_api.Handler
+    environment:
+      SNOWFLAKE_ACCOUNT: 'nsrukzw-xxb04836'
+      SNOWFLAKE_USER: 'INVENTORY_USER'
+      SNOWFLAKE_DATABASE: 'INVENTORY'
+      SNOWFLAKE_SCHEMA: 'INVENTORY'
+      SNOWFLAKE_WAREHOUSE: 'INVENTORY_APP_USER_WAREHOUSE_XS'
+      SNOWFLAKE_PRIVATE_KEY: ${ssm:/nsrukzw-xxb04836.INVENTORY_USER}
+    timeout: 15
+    events:
+      - http:
+          path: /users/login
+          method: POST
+      - http:
+          path: /users/register
+          method: POST
+      - http:
+          path: /work_groups/create
+          method: POST
+      - http:
+          path: /items/create
+          method: POST
+      - http:
+          path: /items/get_one
+          method: GET
+      - http:
+          path: /items/get_all
+          method: GET
+      - http:
+          path: /items/search
+          method: GET
+      - http:
+          path: /items/edit
+          method: PUT
+      - http:
+          path: /items/delete
+          method: DELETE
