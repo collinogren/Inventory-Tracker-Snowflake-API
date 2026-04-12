@@ -24,6 +24,11 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	private static final Logger LOG = LogManager.getLogger();
 	private static final Map<String, String> HEADERS = new HashMap<>();
 	private static final MessageDigest messageDigest;
+	private static final Set<String> HTTP_ROUTES = Set.of(
+		"/users/login", "/users/register", "/work_groups/create",
+		"items/create", "items/get_one", "items/get_all",
+		"items/search", "items/edit", "items/delete"
+	);
 
 	static {
 		HEADERS.put("Content-Type", "application/json");
@@ -85,8 +90,8 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		String sql = """
 				select *
 				from INVENTORY_USERS
-				where username = 'test'
-				and password_hash = 'test';""";
+				where username = ?
+				and password_hash = ?;""";
 
 		PreparedStatement statement = connection.prepareStatement(sql);
 		statement.setString(1, username);
@@ -243,6 +248,169 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		return statement;
 	}
 
+	private PreparedStatement handleUserLogin(Map<String, String> headers) throws Exception {
+		if (headers == null) return null;
+
+		String username = headers.get("username");
+		String password = headers.get("password");
+
+		if (username == null || password == null) return null;
+
+		String passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
+		Connection connection = Connector.connect();
+		return userLoginPreparedStatement(username, passwordHash, connection);
+	}
+
+	private PreparedStatement handleUserRegister(Map<String, String> headers) throws Exception {
+		if (headers == null) return null;
+
+		String username = headers.get("username");
+		String password = headers.get("password");
+		String workGroupIDString = headers.get("workGroupID");
+
+		if (username == null || password == null) return null;
+
+		int workGroupID;
+		try {
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		String passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
+		Connection connection = Connector.connect();
+		return userRegisterPreparedStatement(username, passwordHash, workGroupID, connection);
+	}
+
+	private PreparedStatement handleWorkGroupCreate(Map<String, String> headers) throws Exception {
+		if (headers == null) return null;
+
+		String workGroupName = headers.get("workGroupName");
+		String joinPassword = headers.get("joinPassword");
+		String adminPassword = headers.get("adminPassword");
+
+		if (workGroupName == null || joinPassword == null || adminPassword == null) return null;
+
+		String joinPasswordHash = Arrays.toString(messageDigest.digest(joinPassword.getBytes(StandardCharsets.UTF_8)));
+		String adminPasswordHash = Arrays.toString(messageDigest.digest(adminPassword.getBytes(StandardCharsets.UTF_8)));
+
+		Connection connection = Connector.connect();
+		return workGroupCreatePreparedStatement(workGroupName, joinPasswordHash, adminPasswordHash, connection);
+	}
+
+	private PreparedStatement handleItemCreate(Map<String, String> headers) throws Exception {
+		String itemName = headers.get("itemName");
+		String itemQuantityString = headers.get("itemQuantity");
+		String workGroupIDString = headers.get("workGroupID");
+
+		int itemQuantity;
+		int workGroupID;
+		try {
+			itemQuantity = Integer.parseInt(itemQuantityString);
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+		return itemCreatePreparedStatement(itemName, itemQuantity, workGroupID, connection);
+	}
+
+	private PreparedStatement handleItemGetOne(Map<String, String> headers) throws Exception {
+		String itemIDString = headers.get("itemID");
+		String workGroupIDString = headers.get("workGroupID");
+
+		if (itemIDString == null || workGroupIDString == null) return null;
+
+		int itemID;
+		int workGroupID;
+		try {
+			itemID = Integer.parseInt(itemIDString);
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+		return itemGetOnePreparedStatement(itemID, workGroupID, connection);
+	}
+
+	private PreparedStatement handleItemGetAll(Map<String, String> headers) throws Exception {
+		String workGroupIDString = headers.get("workGroupID");
+
+		if (workGroupIDString == null) return null;
+
+		int workGroupID;
+		try {
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+		return itemGetAllPreparedStatement(workGroupID, connection);
+	}
+
+	private PreparedStatement handleItemSearch(Map<String, String> headers) throws Exception {
+		String itemName = headers.get("itemName");
+		String workGroupIDString = headers.get("workGroupID");
+
+		if (itemName == null || workGroupIDString == null) return null;
+
+		int workGroupID;
+		try {
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+
+		if (itemName.isEmpty()) {
+			return itemGetAllPreparedStatement(workGroupID, connection);
+		}
+
+		return itemSearchPreparedStatement(itemName, workGroupID, connection);
+	}
+
+	private PreparedStatement handleItemEdit(Map<String, String> headers) throws Exception {
+		String itemName = headers.get("itemName");
+		String itemQuantityString = headers.get("itemQuantity");
+		String itemIDString = headers.get("itemID");
+		String workGroupIDString = headers.get("workGroupID");
+
+		int itemQuantity;
+		int itemID;
+		int workGroupID;
+		try {
+			itemQuantity = Integer.parseInt(itemQuantityString);
+			itemID = Integer.parseInt(itemIDString);
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+		return itemEditPreparedStatement(itemName, itemQuantity, itemID, workGroupID, connection);
+	}
+
+	private PreparedStatement handleItemDelete(Map<String, String> headers) throws Exception {
+		String itemIDString = headers.get("itemID");
+		String workGroupIDString = headers.get("workGroupID");
+
+		int itemID;
+		int workGroupID;
+		try {
+			itemID = Integer.parseInt(itemIDString);
+			workGroupID = Integer.parseInt(workGroupIDString);
+		} catch (NumberFormatException _) {
+			return null;
+		}
+
+		Connection connection = Connector.connect();
+		return itemDeletePreparedStatement(itemID, workGroupID, connection);
+	}
+
 	@Override
 	@SuppressWarnings("unchecked")
 	public ApiGatewayResponse handleRequest(Map<String, Object> input, Context context) {
@@ -251,222 +419,45 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		Map<String, String> headersParameters = (Map<String, String>) input.get("headers");
 
 		try {
-			PreparedStatement statement = null;
-			Connection connection;
-			String username;
-			String password;
-			String passwordHash;
-			int workGroupID;
-			String itemIDString;
-			int itemID;
-			String itemName;
-			String itemQuantityString;
-			int itemQuantity;
-			String workGroupIDString;
-
-			switch (path) {
-				case "/users/login":
-					if (headersParameters == null) {
-						handleBadRequest();
-						break;
-					}
-
-					username = headersParameters.get("username");
-					password = headersParameters.get("password");
-
-					if (username == null || password == null) {
-						handleBadRequest();
-						break;
-					}
-
-					passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
-
-					connection = Connector.connect();
-					statement = userLoginPreparedStatement(username, passwordHash, connection);
-					break;
-				case "/users/register":
-					if (headersParameters == null) {
-						handleBadRequest();
-						break;
-					}
-
-					username = headersParameters.get("username");
-					password = headersParameters.get("password");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					if (username == null || password == null) {
-						handleBadRequest();
-						break;
-					}
-
-					try {
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-
-					passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
-
-					connection = Connector.connect();
-					statement = userRegisterPreparedStatement(username, passwordHash, workGroupID,connection);
-					break;
-				case "/work_groups/create":
-					if (headersParameters == null) {
-						handleBadRequest();
-						break;
-					}
-
-					String workGroupName = headersParameters.get("workGroupName");
-					String joinPassword = headersParameters.get("joinPassword");
-					String adminPassword = headersParameters.get("adminPassword");
-
-					if (workGroupName == null || joinPassword == null || adminPassword == null) {
-						handleBadRequest();
-						break;
-					}
-
-					String joinPasswordHash = Arrays.toString(messageDigest.digest(joinPassword.getBytes(StandardCharsets.UTF_8)));
-					String adminPasswordHash = Arrays.toString(messageDigest.digest(adminPassword.getBytes(StandardCharsets.UTF_8)));
-
-					connection = Connector.connect();
-					statement = workGroupCreatePreparedStatement(workGroupName, joinPasswordHash, adminPasswordHash, connection);
-					break;
-				case "items/create":
-					itemName = headersParameters.get("itemName");
-					itemQuantityString = headersParameters.get("itemQuantity");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					try {
-						itemQuantity = Integer.parseInt(itemQuantityString);
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-
-					connection = Connector.connect();
-					statement = itemCreatePreparedStatement(itemName, itemQuantity, workGroupID, connection);
-					break;
-				case "items/get_one":
-					itemIDString = headersParameters.get("itemID");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					if (itemIDString == null || workGroupIDString == null) {
-						handleBadRequest();
-						break;
-					}
-
-					try {
-						itemID = Integer.parseInt(itemIDString);
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-
-					connection = Connector.connect();
-					statement = itemGetOnePreparedStatement(itemID, workGroupID, connection);
-					break;
-				case "items/get_all":
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					if (workGroupIDString == null) {
-						handleBadRequest();
-						break;
-					}
-
-					try {
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-					connection = Connector.connect();
-					statement = itemGetAllPreparedStatement(workGroupID, connection);
-					break;
-				case "items/search":
-					itemName = headersParameters.get("itemName");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					if (itemName == null || workGroupIDString == null) {
-						handleBadRequest();
-						break;
-					}
-
-					try {
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-					connection = Connector.connect();
-
-					if (itemName.isEmpty()) {
-						statement = itemGetAllPreparedStatement(workGroupID, connection);
-						break;
-					}
-
-					connection = Connector.connect();
-					statement = itemSearchPreparedStatement(itemName, workGroupID, connection);
-					break;
-				case "items/edit":
-					itemName = headersParameters.get("itemName");
-					itemQuantityString = headersParameters.get("itemQuantity");
-					itemIDString = headersParameters.get("itemID");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					try {
-						itemQuantity = Integer.parseInt(itemQuantityString);
-						itemID = Integer.parseInt(itemIDString);
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-
-					connection = Connector.connect();
-					statement = itemEditPreparedStatement(itemName, itemQuantity, itemID, workGroupID, connection);
-					break;
-				case "items/delete":
-					itemIDString = headersParameters.get("itemID");
-					workGroupIDString = headersParameters.get("workGroupID");
-
-					try {
-						itemID = Integer.parseInt(itemIDString);
-						workGroupID = Integer.parseInt(workGroupIDString);
-					} catch (NumberFormatException _) {
-						handleBadRequest();
-						break;
-					}
-
-					connection = Connector.connect();
-					statement = itemDeletePreparedStatement(itemID, workGroupID, connection);
-					break;
-				default:
-					return handleDefault();
+			if (!HTTP_ROUTES.contains(path)) {
+				return handleDefault();
 			}
 
-			long startTime = System.nanoTime();
+            long startTime;
+            ResultSet resultSet;
+            try (PreparedStatement statement = switch (path) {
+                case "/users/login" -> handleUserLogin(headersParameters);
+                case "/users/register" -> handleUserRegister(headersParameters);
+                case "/work_groups/create" -> handleWorkGroupCreate(headersParameters);
+                case "items/create" -> handleItemCreate(headersParameters);
+                case "items/get_one" -> handleItemGetOne(headersParameters);
+                case "items/get_all" -> handleItemGetAll(headersParameters);
+                case "items/search" -> handleItemSearch(headersParameters);
+                case "items/edit" -> handleItemEdit(headersParameters);
+                case "items/delete" -> handleItemDelete(headersParameters);
+                default -> null;
+            }) {
 
-			ResultSet resultSet;
-			if (statement == null) {
-				return ApiGatewayResponse.builder().setStatusCode(400).build();
-			} else {
+				if (statement == null) {
+					return ApiGatewayResponse.builder().setStatusCode(400).build();
+				}
+
+				startTime = System.nanoTime();
+
 				resultSet = statement.executeQuery();
+
+				long timeMilliseconds = (System.nanoTime() - startTime) / 1000000;
+				ArrayList<Object[]> results = new ArrayList<>();
+
+				while (resultSet.next()) {
+					results.add(new Object[]{resultSet.getObject(1), resultSet.getObject(2)});
+				}
+
+				return ApiGatewayResponse.builder()
+						.setStatusCode(200)
+						.setObjectBody(new Response(results, timeMilliseconds))
+						.setHeaders(HEADERS).build();
 			}
-
-			long timeMilliseconds = (System.nanoTime() - startTime) / 1000000;
-			ArrayList<Object[]> results = new ArrayList<>();
-
-			while (resultSet.next()) {
-				results.add(new Object[] { resultSet.getObject(1), resultSet.getObject(2) });
-			}
-
-			return ApiGatewayResponse.builder()
-					.setStatusCode(200)
-					.setObjectBody(new Response(results, timeMilliseconds))
-					.setHeaders(HEADERS).build();
 		} catch (Exception e) {
 			LOG.error(e);
 			return ApiGatewayResponse.builder().setStatusCode(500).build();
