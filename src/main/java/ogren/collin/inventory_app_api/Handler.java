@@ -6,19 +6,20 @@ import java.security.*;
 import java.sql.*;
 import java.util.*;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import ogren.collin.inventory_app_api.responses.AResponse;
 import ogren.collin.inventory_app_api.responses.MutationResponse;
 import ogren.collin.inventory_app_api.responses.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
 import static ogren.collin.inventory_app_api.Constants.*;
 
@@ -47,17 +48,32 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 					Security.addProvider(new BouncyCastleProvider());
 				}
 
-				key = key.replace("\\n", "\n");
+				if (key == null || key.isBlank()) {
+					throw new IllegalArgumentException("Private key is null or empty");
+				}
+
+				key = key.replace("\\n", "\n").trim();
+
+				LogManager.getLogger(PrivateKeyReader.class).info(key.substring(0, Math.min(100, key.length())));
+
 				PEMParser pemParser = new PEMParser(new StringReader(key));
-				PrivateKeyInfo keyInfo = (PrivateKeyInfo) pemParser.readObject();
+				Object object = pemParser.readObject();
 				pemParser.close();
+
 				JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME);
-				return converter.getPrivateKey(keyInfo);
+
+				if (object instanceof PrivateKeyInfo) {
+					return converter.getPrivateKey((PrivateKeyInfo) object);
+				} else if (object instanceof PEMKeyPair) {
+					return converter.getKeyPair((PEMKeyPair) object).getPrivate();
+				} else {
+					throw new IllegalArgumentException("Unsupported key format: " + object);
+				}
 			}
 		}
 
 		public static Connection connect() throws Exception {
-			if (connection == null) {
+			if (connection == null || connection.isClosed() || !connection.isValid(5)) {
 				Map<String, String> env = System.getenv();
 				Properties props = new Properties();
 				props.put("CLIENT_SESSION_KEEP_ALIVE", true);
@@ -67,6 +83,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 				props.put("warehouse", env.get("SNOWFLAKE_WAREHOUSE"));
 				props.put("db", env.get("SNOWFLAKE_DATABASE"));
 				props.put("schema", env.get("SNOWFLAKE_SCHEMA"));
+				props.put("JDBC_QUERY_RESULT_FORMAT", "JSON");
 				String url = "jdbc:snowflake://" + env.get("SNOWFLAKE_ACCOUNT") + ".snowflakecomputing.com/";
 				connection = DriverManager.getConnection(url, props);
 				return connection;
@@ -432,6 +449,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	private Response tryReadResponses(String path, Map<String, Object> bodyParameters) throws Exception {
 		ResultSet resultSet;
 		try (PreparedStatement statement = switch (path) {
+			case USERS_LOGIN -> handleUserLogin(bodyParameters);
 			case ITEMS_GET_ONE -> handleItemGetOne(bodyParameters);
 			case ITEMS_GET_ALL -> handleItemGetAll(bodyParameters);
 			case ITEMS_SEARCH -> handleItemSearch(bodyParameters);
@@ -464,7 +482,6 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	private MutationResponse tryWriteResponses(String path, Map<String, Object> bodyParameters) throws Exception {
 		int rowsAffected;
 		try (PreparedStatement statement = switch (path) {
-			case USERS_LOGIN -> handleUserLogin(bodyParameters);
 			case USERS_REGISTER -> handleUserRegister(bodyParameters);
 			case ITEMS_CREATE -> handleItemCreate(bodyParameters);
 			case ITEMS_EDIT -> handleItemEdit(bodyParameters);

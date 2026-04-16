@@ -5,9 +5,8 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public record ApiGatewayResponse(int statusCode, String body, Map<String, String> headers, boolean isBase64Encoded) {
 
@@ -17,16 +16,13 @@ public record ApiGatewayResponse(int statusCode, String body, Map<String, String
 
 	public static class Builder {
 
-		private static final Logger LOG = LogManager.getLogger();
-
-		private static final ObjectMapper objectMapper = new ObjectMapper();
-
 		private int statusCode = 200;
 		private Map<String, String> headers = Collections.emptyMap();
 		private String rawBody;
 		private Object objectBody;
 		private byte[] binaryBody;
 		private boolean base64Encoded;
+		private final ObjectMapper objectMapper = new ObjectMapper();
 
 		public Builder setStatusCode(int statusCode) {
 			this.statusCode = statusCode;
@@ -66,7 +62,7 @@ public record ApiGatewayResponse(int statusCode, String body, Map<String, String
 			} else if (objectBody != null) {
 				try {
 					body = objectMapper.writeValueAsString(objectBody);
-				} catch (Exception e) {
+				} catch (JsonProcessingException e) {
 					throw new RuntimeException(e);
 				}
 			} else if (binaryBody != null) {

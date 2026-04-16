@@ -32,7 +32,7 @@ functions:
       SNOWFLAKE_DATABASE: 'INVENTORY'
       SNOWFLAKE_SCHEMA: 'INVENTORY'
       SNOWFLAKE_WAREHOUSE: 'INVENTORY_APP_USER_WAREHOUSE_XS'
-      SNOWFLAKE_PRIVATE_KEY: ${ssm:/nsrukzw-xxb04836.INVENTORY_USER}
+      SNOWFLAKE_PRIVATE_KEY: ${aws:ssm:/nsrukzw-xxb04836.INVENTORY_USER}
     timeout: 15
     events:
       - http:
@@ -40,9 +40,6 @@ functions:
           method: POST
       - http:
           path: /users/register
-          method: POST
-      - http:
-          path: /work_groups/create
           method: POST
       - http:
           path: /items/create
