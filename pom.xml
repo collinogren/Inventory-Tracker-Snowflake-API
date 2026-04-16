@@ -46,19 +46,13 @@
     <dependency>
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-core</artifactId>
-      <version>3.1.1</version>
+      <version>3.1.2</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>3.1.1</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
-      <version>2.21</version>
+      <version>3.1.2</version>
       <scope>compile</scope>
     </dependency>
   </dependencies>
@@ -80,10 +74,35 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>copy-layer-deps</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.basedir}/layer/java/lib</outputDirectory>
+              <includeScope>runtime</includeScope>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.6.2</version>
         <configuration>
           <createDependencyReducedPom>false</createDependencyReducedPom>
+          <artifactSet>
+            <excludes>
+              <exclude>net.snowflake:snowflake-jdbc</exclude>
+              <exclude>org.bouncycastle:bcprov-jdk18on</exclude>
+              <exclude>org.bouncycastle:bcpkix-jdk18on</exclude>
+            </excludes>
+          </artifactSet>
         </configuration>
         <executions>
           <execution>

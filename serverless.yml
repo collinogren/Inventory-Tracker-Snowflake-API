@@ -1,3 +1,7 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: snhustudent
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: collinogren-inventory-app
 service: inventory-app-api
 
 provider:
@@ -5,13 +9,23 @@ provider:
   runtime: java25
   lambdaHashingVersion: 20201221
   region: us-west-2
-  
+
 package:
-  artifact: target/inventory-app-api.jar
+  artifact: target/inventory-tracker-snowflake-api.jar
+
+layers:
+  snowflakeDeps:
+    path: ./layer
+    name: snowflake-jdbc-deps
+    description: Snowflake JDBC and heavy dependencies
+    compatibleRuntimes:
+      - java25
 
 functions:
   api:
     handler: ogren.collin.inventory_app_api.Handler
+    layers:
+      - !Ref SnowflakeDepsLambdaLayer
     environment:
       SNOWFLAKE_ACCOUNT: 'nsrukzw-xxb04836'
       SNOWFLAKE_USER: 'INVENTORY_USER'

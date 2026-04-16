@@ -5,11 +5,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class DefaultResponse {
 
 	private final String result;
-	private final long time_ms;
+	private final long timeMilliseconds;
 
 	public DefaultResponse() {
 		this.result = "Nothing to see here";
-		this.time_ms = 0;
+		this.timeMilliseconds = 0;
 	}
 
 	public String getResult() {
@@ -17,7 +17,7 @@ public class DefaultResponse {
 	}
 
 	@JsonProperty("time_ms")
-	public long getTimeMs() {
-		return this.time_ms;
+	public long getTimeMilliseconds() {
+		return this.timeMilliseconds;
 	}
 }

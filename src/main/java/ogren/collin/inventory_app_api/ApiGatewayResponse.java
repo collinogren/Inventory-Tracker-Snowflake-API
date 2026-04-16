@@ -5,10 +5,9 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonProcessingException;
-import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import tools.jackson.databind.ObjectMapper;
 
 public record ApiGatewayResponse(int statusCode, String body, Map<String, String> headers, boolean isBase64Encoded) {
 
@@ -67,7 +66,7 @@ public record ApiGatewayResponse(int statusCode, String body, Map<String, String
 			} else if (objectBody != null) {
 				try {
 					body = objectMapper.writeValueAsString(objectBody);
-				} catch (JsonProcessingException e) {
+				} catch (Exception e) {
 					throw new RuntimeException(e);
 				}
 			} else if (binaryBody != null) {
