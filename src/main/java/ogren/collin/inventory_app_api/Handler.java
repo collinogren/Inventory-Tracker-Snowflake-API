@@ -8,6 +8,8 @@ import java.util.*;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ogren.collin.inventory_app_api.models.ItemType;
+import ogren.collin.inventory_app_api.models.User;
 import ogren.collin.inventory_app_api.responses.AResponse;
 import ogren.collin.inventory_app_api.responses.MutationResponse;
 import ogren.collin.inventory_app_api.responses.Response;
@@ -147,12 +149,16 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 			Connection connection
 	) throws Exception {
 		String sql = """
-				insert into INVENTORY_USERS (PASSWORD_HASH, USERNAME)
-				values (?, ?);""";
+			merge into INVENTORY_USERS as i_users
+			using (select ? as username_value, ? as password_hash) as source
+			on i_users.USERNAME = source.username_value
+			when not matched then
+			insert (USERNAME, PASSWORD_HASH) values (source.username_value, source.password_hash)
+			""";
 
 		PreparedStatement statement = connection.prepareStatement(sql);
-		statement.setString(1, passwordHash);
-		statement.setString(2, username);
+		statement.setString(1, username);
+		statement.setString(2, passwordHash);
 
 		return statement;
 	}
@@ -181,7 +187,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	) throws Exception {
 
 		String sql = """
-			select ID, ITEM_NAME, ITEM_QUANTITY
+			select *
 			from INVENTORY
 			where ID = ?
 			and USER_ID = ?
@@ -199,7 +205,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 			Connection connection
 	) throws Exception {
 		String sql = """
-			select ID, ITEM_NAME, ITEM_QUANTITY
+			select *
 			from INVENTORY
 			where USER_ID = ?;""";
 
@@ -215,17 +221,15 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 			Connection connection
 	) throws Exception {
 		String sql = """
-			set search_term = ?;
-			
-			select ID, ITEM_NAME, ITEM_QUANTITY, JAROWINKLER_SIMILARITY(ITEM_NAME, $search_term) as similarity_score
+			select ID, ITEM_NAME, ITEM_QUANTITY, JAROWINKLER_SIMILARITY(ITEM_NAME, ?) as similarity_score, USER_ID
 			from INVENTORY
 			where USER_ID = ?
-			and JAROWINKLER_SIMILARITY(ITEM_NAME, $search_term) >= 80
 			order by similarity_score DESC;""";
 
 		PreparedStatement statement = connection.prepareStatement(sql);
 		statement.setString(1, itemName);
 		statement.setInt(2, userID);
+		statement.setString(3, itemName);
 
 		return statement;
 	}
@@ -269,7 +273,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		return statement;
 	}
 
-	private PreparedStatement handleUserLogin(Map<String, Object> body) throws Exception {
+	private PreparedStatementWrapper<User> handleUserLogin(Map<String, Object> body) throws Exception {
 		if (body == null) return null;
 
 		String username = (String) body.get(USERNAME);
@@ -277,12 +281,12 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 
 		if (username == null || password == null) return null;
 
-		String passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
+		String passwordHash = HexFormat.of().formatHex(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
 		Connection connection = Connector.connect();
-		return userLoginPreparedStatement(username, passwordHash, connection);
+		return new PreparedStatementWrapper<>(userLoginPreparedStatement(username, passwordHash, connection), User.class);
 	}
 
-	private PreparedStatement handleUserRegister(Map<String, Object> body) throws Exception {
+	private PreparedStatementWrapper<Integer> handleUserRegister(Map<String, Object> body) throws Exception {
 		if (body == null) return null;
 
 		String username = (String) body.get(USERNAME);
@@ -290,15 +294,15 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 
 		if (username == null || password == null) return null;
 
-		String passwordHash = Arrays.toString(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
+		String passwordHash = HexFormat.of().formatHex(messageDigest.digest(password.getBytes(StandardCharsets.UTF_8)));
 		Connection connection = Connector.connect();
-		return userRegisterPreparedStatement(username, passwordHash, connection);
+		return new PreparedStatementWrapper<>(userRegisterPreparedStatement(username, passwordHash, connection), Integer.class);
 	}
 
-	private PreparedStatement handleItemCreate(Map<String, Object> body) throws Exception {
+	private PreparedStatementWrapper<Integer> handleItemCreate(Map<String, Object> body) throws Exception {
 		String itemName = (String) body.get(ITEM_NAME);
-		String itemQuantityString = (String) body.get(ITEM_QUANTITY);
-		String userIDString = (String) body.get(USER_ID);
+		String itemQuantityString = String.valueOf(body.get(ITEM_QUANTITY));
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		int itemQuantity;
 		int userID;
@@ -310,12 +314,12 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 
 		Connection connection = Connector.connect();
-		return itemCreatePreparedStatement(itemName, itemQuantity, userID, connection);
+		return new PreparedStatementWrapper<>(itemCreatePreparedStatement(itemName, itemQuantity, userID, connection), Integer.class);
 	}
 
-	private PreparedStatement handleItemGetOne(Map<String, Object> body) throws Exception {
-		String itemIDString = (String) body.get(ITEM_ID);
-		String userIDString = (String) body.get(USER_ID);
+	private PreparedStatementWrapper<ItemType> handleItemGetOne(Map<String, Object> body) throws Exception {
+		String itemIDString = String.valueOf(body.get(ITEM_ID));
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		if (itemIDString == null || userIDString == null) return null;
 
@@ -329,11 +333,11 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 
 		Connection connection = Connector.connect();
-		return itemGetOnePreparedStatement(itemID, userID, connection);
+		return new PreparedStatementWrapper<>(itemGetOnePreparedStatement(itemID, userID, connection), ItemType.class);
 	}
 
-	private PreparedStatement handleItemGetAll(Map<String, Object> body) throws Exception {
-		String userIDString = (String) body.get(USER_ID);
+	private PreparedStatementWrapper<ItemType> handleItemGetAll(Map<String, Object> body) throws Exception {
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		if (userIDString == null) return null;
 
@@ -345,12 +349,12 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 
 		Connection connection = Connector.connect();
-		return itemGetAllPreparedStatement(userID, connection);
+		return new PreparedStatementWrapper<>(itemGetAllPreparedStatement(userID, connection), ItemType.class);
 	}
 
-	private PreparedStatement handleItemSearch(Map<String, Object> body) throws Exception {
-		String itemName = (String) body.get(ITEM_NAME);
-		String userIDString = (String) body.get(USER_ID);
+	private PreparedStatementWrapper<ItemType> handleItemSearch(Map<String, Object> body) throws Exception {
+		String itemName = String.valueOf(body.get(ITEM_NAME));
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		if (itemName == null || userIDString == null) return null;
 
@@ -364,17 +368,17 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		Connection connection = Connector.connect();
 
 		if (itemName.isEmpty()) {
-			return itemGetAllPreparedStatement(userID, connection);
+			return new PreparedStatementWrapper<>(itemGetAllPreparedStatement(userID, connection), ItemType.class);
 		}
 
-		return itemSearchPreparedStatement(itemName, userID, connection);
+		return new PreparedStatementWrapper<>(itemSearchPreparedStatement(itemName, userID, connection), ItemType.class);
 	}
 
-	private PreparedStatement handleItemEdit(Map<String, Object> body) throws Exception {
+	private PreparedStatementWrapper<Integer> handleItemEdit(Map<String, Object> body) throws Exception {
 		String itemName = (String) body.get(ITEM_NAME);
-		String itemQuantityString = (String) body.get(ITEM_QUANTITY);
-		String itemIDString = (String) body.get(ITEM_ID);
-		String userIDString = (String) body.get(USER_ID);
+		String itemQuantityString = String.valueOf(body.get(ITEM_QUANTITY));
+		String itemIDString = String.valueOf(body.get(ITEM_ID));
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		int itemQuantity;
 		int itemID;
@@ -388,12 +392,12 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 
 		Connection connection = Connector.connect();
-		return itemEditPreparedStatement(itemName, itemQuantity, itemID, userID, connection);
+		return new PreparedStatementWrapper<>(itemEditPreparedStatement(itemName, itemQuantity, itemID, userID, connection), Integer.class);
 	}
 
-	private PreparedStatement handleItemDelete(Map<String, Object> body) throws Exception {
-		String itemIDString = (String) body.get(ITEM_ID);
-		String userIDString = (String) body.get(USER_ID);
+	private PreparedStatementWrapper<Integer> handleItemDelete(Map<String, Object> body) throws Exception {
+		String itemIDString = String.valueOf(body.get(ITEM_ID));
+		String userIDString = String.valueOf(body.get(USER_ID));
 
 		int itemID;
 		int userID;
@@ -405,7 +409,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 
 		Connection connection = Connector.connect();
-		return itemDeletePreparedStatement(itemID, userID, connection);
+		return new PreparedStatementWrapper<>(itemDeletePreparedStatement(itemID, userID, connection), Integer.class);
 	}
 
 	private final ObjectMapper mapper = new ObjectMapper();
@@ -448,40 +452,52 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 
 	private Response tryReadResponses(String path, Map<String, Object> bodyParameters) throws Exception {
 		ResultSet resultSet;
-		try (PreparedStatement statement = switch (path) {
+		try (PreparedStatementWrapper<?> wrappedPreparedStatement = switch (path) {
 			case USERS_LOGIN -> handleUserLogin(bodyParameters);
 			case ITEMS_GET_ONE -> handleItemGetOne(bodyParameters);
 			case ITEMS_GET_ALL -> handleItemGetAll(bodyParameters);
 			case ITEMS_SEARCH -> handleItemSearch(bodyParameters);
 			default -> null;
 		}) {
-			if (statement == null) {
+			if (wrappedPreparedStatement == null) {
 				return null;
 			}
 
-			long startTime = System.nanoTime();
+			PreparedStatement statement = wrappedPreparedStatement.preparedStatement();
+			Class<?> expectedType = wrappedPreparedStatement.expectedType();
 
 			resultSet = statement.executeQuery();
 
-			long timeMilliseconds = (System.nanoTime() - startTime) / 1000000;
-			ArrayList<Object[]> results = new ArrayList<>();
+			ArrayList<Object> results = new ArrayList<>();
 
 			while (resultSet.next()) {
-				ArrayList<Object> objects = new ArrayList<>();
-				for (int i = 1; i <= resultSet.getMetaData().getColumnCount(); i++) {
-					objects.add(resultSet.getObject(i));
-				}
-
-				results.add(objects.toArray());
+				results.add(serializeData(resultSet, expectedType));
 			}
 
-			return new Response(results, timeMilliseconds);
+			return new Response(results);
+		}
+	}
+
+	private <T> Object serializeData(ResultSet resultSet, Class<T> expectedType) throws SQLException {
+		if (expectedType == User.class) {
+			return new User(
+					resultSet.getLong("ID"),
+					resultSet.getString("USERNAME"),
+					resultSet.getString("PASSWORD_HASH"));
+		} else if (expectedType == ItemType.class) {
+			return new ItemType(
+					resultSet.getLong("ID"),
+					resultSet.getString("ITEM_NAME"),
+					resultSet.getLong("ITEM_QUANTITY"),
+					resultSet.getLong("USER_ID"));
+		} else {
+			return null;
 		}
 	}
 
 	private MutationResponse tryWriteResponses(String path, Map<String, Object> bodyParameters) throws Exception {
 		int rowsAffected;
-		try (PreparedStatement statement = switch (path) {
+		try (PreparedStatementWrapper<?> statement = switch (path) {
 			case USERS_REGISTER -> handleUserRegister(bodyParameters);
 			case ITEMS_CREATE -> handleItemCreate(bodyParameters);
 			case ITEMS_EDIT -> handleItemEdit(bodyParameters);
@@ -492,13 +508,9 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 				return null;
 			}
 
-			long startTime = System.nanoTime();
+			rowsAffected = statement.preparedStatement().executeUpdate();
 
-			rowsAffected = statement.executeUpdate();
-
-			long timeMilliseconds = (System.nanoTime() - startTime) / 1000000;
-
-			return new MutationResponse(rowsAffected, timeMilliseconds);
+			return new MutationResponse(rowsAffected);
 		}
 	}
 }

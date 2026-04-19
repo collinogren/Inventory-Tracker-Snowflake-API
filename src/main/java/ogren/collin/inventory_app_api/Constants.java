@@ -3,8 +3,6 @@ package ogren.collin.inventory_app_api;
 import java.util.Set;
 
 public class Constants {
-
-    // Header parameters
     // Users
     public static final String USER_ID = "userID";
     public static final String USERNAME = "username";
