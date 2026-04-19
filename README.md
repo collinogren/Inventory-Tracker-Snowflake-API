@@ -5,4 +5,4 @@ All data is sent in the body of the HTTP request for added security.<br>
 Passwords are hashed using SHA-256 and they are stored and retrieved as such for security purposes.<br>
 <br>
 This project is based on the Apache licensed example code by Snowflake: https://www.snowflake.com/en/developers/guides/build-a-custom-api-in-java-on-aws/<br>
-Edits and improvements are made where needed to achieve the end goal.
+Significant edits and improvements are made where needed to achieve the end goal.
