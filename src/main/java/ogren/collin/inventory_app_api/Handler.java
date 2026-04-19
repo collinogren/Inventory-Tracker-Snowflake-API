@@ -74,6 +74,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 			}
 		}
 
+		// Configure Snowflake connection
 		public static Connection connect() throws Exception {
 			if (connection == null || connection.isClosed() || !connection.isValid(5)) {
 				Map<String, String> env = System.getenv();
@@ -105,14 +106,6 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	private ApiGatewayResponse handleBadRequest() {
 		return ApiGatewayResponse.builder()
 				.setStatusCode(400)
-				.setObjectBody(new DefaultResponse())
-				.setHeaders(HEADERS)
-				.build();
-	}
-
-	private ApiGatewayResponse handleInternalServerError() {
-		return ApiGatewayResponse.builder()
-				.setStatusCode(500)
 				.setObjectBody(new DefaultResponse())
 				.setHeaders(HEADERS)
 				.build();
@@ -415,25 +408,28 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	private final ObjectMapper mapper = new ObjectMapper();
 
 	@Override
-	@SuppressWarnings("unchecked")
-	public ApiGatewayResponse handleRequest(Map<String, Object> input, Context context) {
+    public ApiGatewayResponse handleRequest(Map<String, Object> input, Context context) {
 		String path = (String) input.get("path");
 		String body = (String) input.get("body");
 
 		try {
+			// Read the body of the request
 			Map<String, Object> bodyParameters = body != null ?
 					mapper.readValue(body, new TypeReference<>() {}) :
 					new HashMap<>();
 
+			// Check that the path actually exists
 			if (!HTTP_ROUTES.contains(path)) {
 				return handleDefault();
 			}
 
+			// Get a response, if any
 			AResponse<?> response = getResponse(path, bodyParameters);
 			if (response == null) {
 				return handleBadRequest();
 			}
 
+			// Handle the response
 			return handleSuccess(response);
 		} catch (Exception e) {
 			LOGGER.error(e);
@@ -442,6 +438,8 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 	}
 
 	private AResponse<?> getResponse(String path, Map<String, Object> bodyParameters) throws Exception {
+		// A response can either be a read response or a write response.
+		// Check both paths. If a path does not exist for reads or writes they will return null and not be sent.
 		Response readResponse = tryReadResponses(path, bodyParameters);
 		MutationResponse writeResponse = tryWriteResponses(path, bodyParameters);
 
@@ -478,6 +476,7 @@ public class Handler implements RequestHandler<Map<String, Object>, ApiGatewayRe
 		}
 	}
 
+	// Manual serialization of data based on datatype. Automapping exists for more complex frameworks
 	private <T> Object serializeData(ResultSet resultSet, Class<T> expectedType) throws SQLException {
 		if (expectedType == User.class) {
 			return new User(
